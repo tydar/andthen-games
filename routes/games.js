@@ -19,11 +19,11 @@ router.use(async (req, res, next) => {
 	const auth = req.get('Authorization');
 
 	if (typeof auth === 'undefined') {
-		res.send({status: 'error', message: 'not authenticated', code:401, data:{'WWW-Authenticate': 'Bearer'}})
+		res.json({status: 'error', message: 'not authenticated', code:401, data:{'WWW-Authenticate': 'Bearer'}})
 	}
 
 	if (!auth.startsWith('Bearer ')) {
-		res.send({status: 'error', message: 'not authenticated', code:401, data:{'WWW-Authenticate': 'Bearer'}})
+		res.json({status: 'error', message: 'not authenticated', code:401, data:{'WWW-Authenticate': 'Bearer'}})
 	}
 
 	const jwt = auth.slice("Bearer ".length);
@@ -31,7 +31,7 @@ router.use(async (req, res, next) => {
 		await jose.jwtVerify(jwt, stringToKey("your-256-bit-secret"));
 		next();
 	} catch(err) {
-		res.send({status: 'error', message :`jwt auth token error ${err}`, code: 401});
+		res.json({status: 'error', message :`jwt auth token error ${err}`, code: 401});
 	}
 });
 
@@ -40,7 +40,7 @@ router.use(async (req, res, next) => {
 	// looks for player JWT token in httponly cookie
 	const { player_jwt } = req.cookies;
 	if (typeof player_jwt === 'undefined') {
-		res.send({status: 'error', message: 'player token missing', code:401});
+		res.json({status: 'error', message: 'player token missing', code:401});
 	}
 	try {
 		const { payload } = await jose.jwtVerify(player_jwt, stringToKey("your-256-bit-secret"));
@@ -48,20 +48,20 @@ router.use(async (req, res, next) => {
 		req.body.player_id = id;
 		next();
 	} catch(err) {
-		res.send({status: 'error', message: `player token error ${err}`, code: 401});
+		res.json({status: 'error', message: `player token error ${err}`, code: 401});
 	}
 });
 
 router.route('/')
 	.get(async (req, res) => {
-		res.send({status: 'success', data: null});
+		res.json({status: 'success', data: null});
 	}).post(async (req, res) => {
-		res.send({status: 'success', data: null});
+		res.json({status: 'success', data: null});
 	});
 
 router.route('/:gameId')
 	.get(async (req, res) => {
-		res.send({status: 'success', data: null});
+		res.json({status: 'success', data: null});
 	}).post(async (req, res) => {
-		res.send({status: 'success', data: null});
+		res.json({status: 'success', data: null});
 	});
