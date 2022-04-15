@@ -20,7 +20,7 @@ export async function getClient() {
 
 	const timeout = setTimeout(() => {
 		console.error('A client has been checked out for more than 5 seconds!');
-		console.error('The last executed query on this client was: ${client.lastQuery}');
+		console.error(`The last executed query on this client was: ${client.lastQuery}`);
 	}, 5000);
 
 	client.query = (...args) => {

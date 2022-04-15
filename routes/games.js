@@ -1,5 +1,6 @@
 import Router from 'express-promise-router';
 import { createGame, createMove, getGameById, updateCurrentMoveIndex } from '../db/games.js';
+import * as db from '../db/index.js';
 import * as jose from 'jose';
 import cookieParser from 'cookie-parser';
 
@@ -67,10 +68,13 @@ router.route('/')
 		}
 
 		try {
-			const dbResult = await createGame(playerId, playerIds, wordsPerMove, totalMovesAllowed);
+			const client = await db.getClient();
+			const dbResult = await createGame(client, playerId, playerIds, wordsPerMove, totalMovesAllowed);
+			client.release();
 			res.json({status: 'success', data: dbResult.rows[0]});
 		} catch (err) {
 			console.log(err);
+			client.release();
 			res.json({status: 'error', message: 'database error', code: 500, data: {error: err}});
 		}
 	});
@@ -101,6 +105,9 @@ router.route('/:gameId')
 			res.json({status: 'error', message: 'no submitted words', code: 400});
 		}
 
+		// have to keep the current move index around for when we commit the move
+		// is it better to have one try block or two? not sure
+		var currentMoveIdx;
 		try {
 			const dbRes = await getGameById(parsedGameId);
 			const playerIds = dbRes.rows[0].player_ids;
@@ -109,7 +116,7 @@ router.route('/:gameId')
 			}
 
 			const playerCount = playerIds.length;
-			const currentMoveIdx = dbRes.rows[0].current_move_index;
+			currentMoveIdx = dbRes.rows[0].current_move_index;
 			const currentPlayerIdx = currentMoveIdx % playerCount;
 			if(playerIds[currentPlayerIdx] != playerId) {
 				res.json({status: 'fail', data: {message: 'not this player\'s turn'}});
@@ -124,12 +131,26 @@ router.route('/:gameId')
 			if (words.length > wordsPerMove) {
 				res.json({status: 'fail', data: {message: 'too many words'}});
 			}
-
-			const createMoveRes = await createMove(gameId, playerId, currentMoveIdx, words.join(' '));
-			const updateGameRes = await updateCurrentMoveIndex(gameId, currentMoveIdx+1);
-			res.json({status: 'success', data: {result: createMoveRes.rows, indexUpdated: updateGameRes.rowCount}});
 		} catch (err) {
 			console.log(err)
+			res.json({status: 'error', message: 'db error', data:{error: err}, code: 500});
+		}
+
+
+		const client = await db.getClient();
+		try {
+
+			await client.query('BEGIN');
+			const createMoveRes = await createMove(client, gameId, playerId, currentMoveIdx, words.join(' '));
+			const updateGameRes = await updateCurrentMoveIndex(client, gameId, currentMoveIdx+1);
+			await client.query('COMMIT');
+			client.release();
+
+			res.json({status: 'success', data: {result: createMoveRes.rows, indexUpdated: updateGameRes.rowCount}});
+		} catch (err) {
+			await client.query('ROLLBACK');
+			client.release();
+			console.log(err);
 			res.json({status: 'error', message: 'db error', data:{error: err}, code: 500});
 		}
 	});
