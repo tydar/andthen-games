@@ -1,3 +1,5 @@
+"use strict";
+
 import * as db from './index.js';
 
 // create / update/ get games

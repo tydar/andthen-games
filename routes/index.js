@@ -1,3 +1,5 @@
+"use strict";
+
 import * as games from './games.js';
 
 export const mountRoutes = app => {

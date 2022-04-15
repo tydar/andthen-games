@@ -1,3 +1,5 @@
+"use strict";
+
 import Router from 'express-promise-router';
 import { createGame, createMove, getGameById, updateCurrentMoveIndex } from '../db/games.js';
 import * as db from '../db/index.js';

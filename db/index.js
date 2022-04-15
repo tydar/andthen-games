@@ -1,3 +1,5 @@
+"use strict";
+
 import pkg from 'pg';
 const { Pool } = pkg;
 
