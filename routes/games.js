@@ -1,5 +1,5 @@
 import Router from 'express-promise-router';
-import { createGame } from '../db/games.js';
+import { createGame, createMove, getGameById, updateCurrentMoveIndex } from '../db/games.js';
 import * as jose from 'jose';
 import cookieParser from 'cookie-parser';
 
@@ -53,8 +53,8 @@ router.route('/')
 		res.json({status: 'success', data: null});
 	}).post(async (req, res) => {
 		const { playerId } = req;
-		const { playerIds, wordsPerMove, totalWordsAllowed } = req.body.game;
-		const values = [playerId, playerIds, wordsPerMove, totalWordsAllowed];
+		const { playerIds, wordsPerMove, totalMovesAllowed } = req.body.game;
+		const values = [playerId, playerIds, wordsPerMove, totalMovesAllowed];
 
 		if(!areAllDefined(values)) {
 			const missing = undefinedValues(values);
@@ -67,7 +67,7 @@ router.route('/')
 		}
 
 		try {
-			const dbResult = await createGame(playerId, playerIds, wordsPerMove, totalWordsAllowed);
+			const dbResult = await createGame(playerId, playerIds, wordsPerMove, totalMovesAllowed);
 			res.json({status: 'success', data: dbResult.rows[0]});
 		} catch (err) {
 			console.log(err);
@@ -79,7 +79,59 @@ router.route('/:gameId')
 	.get(async (req, res) => {
 		res.json({status: 'success', data: null});
 	}).post(async (req, res) => {
-		res.json({status: 'success', data: null});
+		// to post a new move, we have to validate the player can move
+		// 1) fetch the game to get the player list
+		// 2) confirm this player's ID is in the player list
+		// 3) use the current_move_index to determine whose turn it is and ensure it is this players turn
+		// 4) use the current_move_index * words_per_move to determine whether the game is over
+		const { playerId } = req;
+		const { words } = req.body;
+		const { gameId } = req.params;
+
+		const parsedGameId = parseInt(gameId, 10)
+		if (!isDefined(parsedGameId) || isNaN(parsedGameId)) {
+			res.json({status: 'error', message: 'game ID must be a number: ', code: 400})
+		}
+
+		if (!isDefined(playerId)) {
+			res.json({status: 'error', message: 'no player ID found', code: 401});
+		}
+
+		if (!isDefined(words)) {
+			res.json({status: 'error', message: 'no submitted words', code: 400});
+		}
+
+		try {
+			const dbRes = await getGameById(parsedGameId);
+			const playerIds = dbRes.rows[0].player_ids;
+			if (!playerIds.includes(playerId)) {
+				res.json({status: 'fail', data: {message: 'player not in game'}});
+			}
+
+			const playerCount = playerIds.length;
+			const currentMoveIdx = dbRes.rows[0].current_move_index;
+			const currentPlayerIdx = currentMoveIdx % playerCount;
+			if(playerIds[currentPlayerIdx] != playerId) {
+				res.json({status: 'fail', data: {message: 'not this player\'s turn'}});
+			}
+
+			const totalMovesAllowed = dbRes.rows[0].total_moves_allowed;
+			if (currentMoveIdx > totalMovesAllowed) {
+				res.json({status: 'fail', data: {message: 'the game is over'}});
+			}
+
+			const wordsPerMove = dbRes.rows[0].words_per_move;
+			if (words.length > wordsPerMove) {
+				res.json({status: 'fail', data: {message: 'too many words'}});
+			}
+
+			const createMoveRes = await createMove(gameId, playerId, currentMoveIdx, words.join(' '));
+			const updateGameRes = await updateCurrentMoveIndex(gameId, currentMoveIdx+1);
+			res.json({status: 'success', data: {result: createMoveRes.rows, indexUpdated: updateGameRes.rowCount}});
+		} catch (err) {
+			console.log(err)
+			res.json({status: 'error', message: 'db error', data:{error: err}, code: 500});
+		}
 	});
 
 const isDefined = (value) => {
