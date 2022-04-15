@@ -5,7 +5,6 @@ import cookieParser from 'cookie-parser';
 
 export const router = new Router();
 
-
 router.use(cookieParser());
 
 const stringToKey = (str) => {
@@ -16,19 +15,16 @@ const stringToKey = (str) => {
 router.use(async (req, res, next) => {
 	// authentication middleware used for all /games reqs
 	// checks for a valid Bearer token
-	const auth = req.get('Authorization');
+	const { andthen_auth } = req.cookies;
 
-	if (typeof auth === 'undefined') {
-		res.json({status: 'error', message: 'not authenticated', code:401, data:{'WWW-Authenticate': 'Bearer'}})
+	if (typeof andthen_auth === 'undefined') {
+		res.json({status: 'error', message: 'not authenticated', code:401})
 	}
 
-	if (!auth.startsWith('Bearer ')) {
-		res.json({status: 'error', message: 'not authenticated', code:401, data:{'WWW-Authenticate': 'Bearer'}})
-	}
-
-	const jwt = auth.slice("Bearer ".length);
 	try {
-		await jose.jwtVerify(jwt, stringToKey("your-256-bit-secret"));
+		const { payload } = await jose.jwtVerify(andthen_auth, stringToKey("your-256-bit-secret"));
+		req.body.user_id = payload.id;
+		req.body.admin = payload.admin;
 		next();
 	} catch(err) {
 		res.json({status: 'error', message :`jwt auth token error ${err}`, code: 401});
