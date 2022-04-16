@@ -1,10 +1,18 @@
 "use strict";
 
 import Router from 'express-promise-router';
-import { createGame, createMove, getGameById, updateCurrentMoveIndex } from '../db/games.js';
 import * as db from '../db/index.js';
 import * as jose from 'jose';
 import cookieParser from 'cookie-parser';
+
+import { 
+	createGame,
+	createMove,
+	getGameById,
+	updateCurrentMoveIndex,
+	getGamesByPlayerId,
+	getMovesByGameId
+} from '../db/games.js';
 
 export const router = new Router();
 
@@ -41,7 +49,7 @@ router.use(async (req, res, next) => {
 	if (typeof player_jwt === 'undefined') {
 		res.json({status: 'error', message: 'player token missing', code:401});
 	}
-	var id;
+
 	try {
 		const { payload } = await jose.jwtVerify(player_jwt, stringToKey("your-256-bit-secret"));
 		req.playerId = payload.player_id;
@@ -53,6 +61,27 @@ router.use(async (req, res, next) => {
 
 router.route('/')
 	.get(async (req, res) => {
+		const { playerId } = req;
+
+		if(!isDefined(playerId)) {
+			res.json({
+				status: 'error',
+				message: 'not authenticated',
+				code: 400
+			});
+		}
+
+		try {
+			const dbRes = await getGamesByPlayerId(playerId);
+			if (!Array.isArray(dbRes.rows)) {
+				res.json({status: 'success', data: {games: []}});
+			}
+			res.json({status: 'success', data: {games: dbRes.rows}});
+		} catch(err) {
+			console.log('GET /games/');
+			console.log(err.stack);
+			res.json({status: 'error', data: {error: err.stack}});
+		}
 		res.json({status: 'success', data: null});
 	}).post(async (req, res) => {
 		const { playerId } = req;
@@ -83,7 +112,32 @@ router.route('/')
 
 router.route('/:gameId')
 	.get(async (req, res) => {
-		res.json({status: 'success', data: null});
+		const { playerId } = req;
+		const { gameId } = req.params;
+		
+		const parsedGameId = parseInt(gameId, 10);
+		if (!isDefined(parsedGameId) || isNaN(parsedGameId)) {
+			res.json({status: 'error', message: 'game ID must be a number: ', code: 400})
+		}
+
+		if (!isDefined(playerId)) {
+			res.json({status: 'error', message: 'no player ID found', code: 401});
+		}
+
+		try {
+			const dbResult = await getGameById(parsedGameId);
+			if (!Array.isArray(dbResult.rows) || dbResult.rows.length === 0){
+				res.json({status: 'fail', data: { message: `no such game ${parsedGameId}` }});
+			}
+
+			const movesResult = await getMovesByGameId(parsedGameId);
+			const moves = Array.isArray(movesResult.rows) ? movesResult.rows : [];
+			res.json({ status: 'success', data: {game: dbResult.rows[0], moves: moves }});
+		} catch (err) {
+			console.log("GET /:gameId: ")
+			console.log(err.stack)
+			res.json({status: 'error', message: 'database error', code: 500, data: { error: err.stack }});
+		}
 	}).post(async (req, res) => {
 		// to post a new move, we have to validate the player can move
 		// 1) fetch the game to get the player list

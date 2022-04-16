@@ -33,7 +33,7 @@ export const getGamesByOwnerId = (ownerId) => {
 };
 
 export const getGamesByPlayerId = (playerId) => {
-	return db.query("SELECT * FROM games WHERE $1 IN player_ids;", [playerId]);
+	return db.query("SELECT * FROM games WHERE $1 = ANY(player_ids);", [playerId]);
 };
 
 // create / update / get moves
